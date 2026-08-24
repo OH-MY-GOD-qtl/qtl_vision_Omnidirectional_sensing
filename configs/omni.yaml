@@ -1,0 +1,131 @@
+# 全向感知配置：3 USB(传统检测) + 1 海康(YOLO/TensorRT)
+# 4 相机共用 yaw；海康独享 pitch。
+# 基于 mvs.yaml 合并 demo.yaml 的 TensorRT 参数，并新增 omni 相机安装参数。
+
+enemy_color: "blue"
+
+#####-----神经网络参数-----#####
+yolo_name: yolov5
+classify_model: assets/tiny_resnet.onnx
+yolo11_model_path: assets/yolo11.xml
+yolov8_model_path: assets/yolov8.xml
+yolov5_model_path: assets/yolov5.xml
+use_tensorrt: true
+yolov5_engine_path: assets/yolov5.engine
+device: CPU
+min_confidence: 0.8
+use_traditional: true
+
+#####-----ROI-----#####
+roi: 
+  x: 420
+  y: 50
+  width: 600
+  height: 600
+
+use_roi: false
+
+#####-----USB相机参数-----#####
+image_width: 640
+image_height: 360
+new_image_width: 1280
+new_image_height: 720
+fov_h: 57.7
+fov_v: 56.7 
+new_fov_h: 37
+new_fov_v: 40.9
+usb_frame_rate: 60
+usb_exposure: 305
+new_usb_exposure: 320
+usb_gamma: 160
+usb_gain: 10
+
+#####-----工业相机参数-----#####
+camera_name: "hikrobot"
+exposure_ms: 10
+gain: 16
+vid_pid: "2bdf:0001"
+
+#####-----传统方法参数-----#####
+color_threshold: 40
+brightness_threshold: 100
+max_angle_error: 45
+min_lightbar_ratio: 1.5
+max_lightbar_ratio: 20
+min_lightbar_length: 8
+min_armor_ratio: 1
+max_armor_ratio: 5
+max_side_ratio: 1.5
+max_rectangular_error: 25
+min_confidence: 0.8
+
+#####-----cboard参数-----#####
+quaternion_canid: 0x01
+bullet_speed_canid: 0x110
+send_canid: 0xff
+can_interface: "can0"
+
+#####-----tracker参数-----#####
+min_detect_count: 5
+max_temp_lost_count: 15
+outpost_max_temp_lost_count: 75
+
+#####-----aimer参数-----#####
+yaw_offset: -2.5
+pitch_offset: 0
+comming_angle: 70
+leaving_angle: 30
+decision_speed: 7
+high_speed_delay_time: 0.066
+low_speed_delay_time: 0.015
+
+#####-----shooter参数-----#####
+first_tolerance: 3
+second_tolerance: 2
+judge_distance: 2
+auto_fire: true
+
+#####-----decider参数-----#####
+mode: 1
+
+#####-----全向感知(omni)参数-----#####
+omni_usb_yaw_offsets: [60, -60, -180]  # 三个USB相对yaw零位的安装角(degree)
+omni_hik_yaw_offset: 0                  # 海康相对yaw零位安装角(degree)
+omni_hik_fov_h: 54.2                    # 海康水平FOV(degree)
+omni_hik_fov_v: 44.5                    # 海康垂直FOV(degree)
+omni_pitch_preset: 0                    # 无海康目标时pitch预设(degree)
+
+#####-----工业相机标定参数-----#####
+R_gimbal2imubody: [1, 0, 0, 0, 1, 0, 0, 0, 1]
+
+camera_matrix: [1776.9477196851155, 0, 756.31235265560952, 0, 1776.0591253569607, 566.16539069551641, 0, 0, 1]
+distort_coeffs: [-0.08382326954462313, 0.097449270330296239, -0.0012558283068959985, 0.0037372210254148081, 0]
+
+R_camera2gimbal: [0, 0, 1, -1, 0, 0, 0, -1, 0]
+t_camera2gimbal: [0.1, 0, 0.05]
+
+#####-----buff_detector参数-----#####
+detect:
+  contrast: 1
+  brightness: 
+    blue: -120
+    red: -100
+  brightness_threshold:
+    blue: 120
+    red: 80
+  morphology_size:
+    blue: 3
+    red: 2
+  dilate_size: 1
+  R_contours_min_area: 1
+  R_contours_max_area: 600
+  fanblades_head_contours_min_area: 300
+  fanblades_head_contours_max_area: 8000
+  fanblades_body_contours_min_area: 1000
+  fanblades_body_contours_max_area: 4000
+  standard_fanblade_path: ./assets/standard_fanblade.jpg
+
+#####-----buff_aimer参数-----#####
+aim_time: 0.200
+wait_time: 0.050
+predict_time: 0.300
