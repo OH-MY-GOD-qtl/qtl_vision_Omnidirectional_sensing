@@ -1,0 +1,103 @@
+enemy_color: "blue"
+# enemy_color: "red"
+
+#####-----神经网络参数-----#####
+yolo_name: yolov5
+classify_model: assets/tiny_resnet.onnx
+yolo11_model_path: assets/yolo11.xml
+yolov8_model_path: assets/yolov8.xml
+yolov5_model_path: assets/0526.onnx
+device: CPU
+min_confidence: 0.8
+use_traditional: false
+
+#####-----ROI-----#####
+roi: 
+  x: 420
+  y: 50
+  width: 600
+  height: 600
+
+use_roi: false
+
+#####-----传统方法参数-----#####
+color_threshold: 40   # 颜色差阈值（分离通道：红敌R-B / 蓝敌B-R）
+brightness_threshold: 100 # 亮度阈值（灰度）
+max_angle_error: 45 # degree
+min_lightbar_ratio: 1.5
+max_lightbar_ratio: 20
+min_lightbar_length: 8
+min_armor_ratio: 1
+max_armor_ratio: 5
+max_side_ratio: 1.5
+max_rectangular_error: 25 # degree
+min_confidence: 0.8
+
+#####-----tracker参数-----#####
+min_detect_count: 5
+max_temp_lost_count: 15
+outpost_max_temp_lost_count: 75
+
+#####-----aimer参数-----#####
+yaw_offset: -0.5 # -0.5(能用) 左移调大 degree -2.5 +  left     - right -2.4   -0.75
+pitch_offset: 4.5 # 4.5（能用）上移调大 deg  （原）ree 2 正值：瞄准点向down偏移 负值：瞄准点向up偏移  -2.5
+
+# 距离相关的偏移量补偿，格式为：[[距离1, yaw偏移1, pitch偏移1], [距离2, yaw偏移2, pitch偏移2], ...]
+# 偏移量单位：度(若注释掉，则不使用距离补偿，直接使用aimer原偏移量)
+distance_offsets:
+  - [0.5, -1, -6]    # 0.5米距离
+  - [1, -1.5, -7]  # 1米距离
+  - [1.5, -2, -8]   # 1.5米距离
+  - [2, -2.5, -9] # 2米距离
+  - [2.5, -3, -10]  # 2.5米距离
+
+# 小陀螺补偿参数
+
+comming_angle: 60 # degree
+leaving_angle: 20 # degree
+decision_speed: 8 # rad/s
+high_speed_delay_time: 0.315 # s
+low_speed_delay_time: 0.010 # s 0.350
+
+#####-----shooter参数-----#####
+first_tolerance: 2 # 近距离射击容差，degree
+second_tolerance: 1.5 # 远距离射击容差，degree
+judge_distance: 2 #距离判断阈值
+auto_fire: true # 是否由自瞄控制射击
+
+camera_name: "hikrobot"
+exposure_ms: 10
+gain: 16
+vid_pid: "2bdf:0001"
+
+#  1  0  0
+#  0  1  0
+#  0  0  1
+
+R_gimbal2imubody: [1, 0, 0, 0, 1, 0, 0, 0, 1]
+
+
+# 重投影误差: 0.5636px
+camera_matrix: [1810.9473013658373, 0, 706.95179374141117, 0, 1813.6518705109158, 536.1155103556514, 0, 0, 1]
+distort_coeffs: [-0.064649904589680188, 0.083963237292381088, 0.000391196402250467, 0.00062308552549344466, 0]
+
+# 相机同理想情况的偏角: yaw-0.42 pitch-3.46 roll-0.82 degree
+R_camera2gimbal: [0.0081120639379237414, -0.060265599371673015, 0.99814941364058318, -0.99986609680818783, -0.014675545844739402, 0.0072399452842164128, 0.014212067837810748, -0.99807448914724395, -0.060376578581777141]
+t_camera2gimbal: [0.14460038433989067, 0.0052186190263461179, 0.034739405527821662]
+#####-----gimbal参数-----#####
+com_port: "/dev/ttyACM0"
+baud_rate: 115200     # 波特率
+bytesize: 8             # 数据位
+parity: "none"          # 奇偶校验（none/odd/even）
+stopbits: 1             # 停止位
+
+#####-----planner-----#####
+fire_thresh: 0.003
+
+max_yaw_acc: 50
+Q_yaw: [9e5, 0]
+R_yaw: [100]
+
+max_pitch_acc: 50
+Q_pitch: [9e6,100] #响应精度
+R_pitch: [200] #平滑精度

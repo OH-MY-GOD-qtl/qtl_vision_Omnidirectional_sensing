@@ -1,0 +1,7 @@
+build/
+assets/demo.avi
+logs/*.log
+patterns/
+records/
+MvSdkLog/
+assets/*.engine

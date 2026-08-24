@@ -1,0 +1,5 @@
+
+camera_name: "hikrobot"
+exposure_ms: 20  # 曝光时间(毫秒)
+gain: 16         # 增益
+vid_pid: "2bdf:0001"  # 海康相机的VID:PID，可通过 `lsusb` 命令查看
