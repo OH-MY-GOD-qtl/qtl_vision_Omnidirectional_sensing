@@ -23,6 +23,19 @@ Decider::Decider(const std::string & config_path) : detector_(config_path), coun
     enemy_color_ =
         (yaml_read<std::string>(yaml, "enemy_color") == "red") ? Color::red : Color::blue;
     mode_ = yaml_read<double>(yaml, "mode");
+
+    // 全向感知相机安装参数（缺失时使用默认值，兼容旧配置）
+    usb_yaw_offsets_ = {60, -60, -180};
+    if (yaml["omni_usb_yaw_offsets"]) {
+        usb_yaw_offsets_.clear();
+        for (const auto & v : yaml["omni_usb_yaw_offsets"]) {
+            usb_yaw_offsets_.push_back(v.as<double>());
+        }
+    }
+    hik_yaw_offset_ = yaml["omni_hik_yaw_offset"] ? yaml["omni_hik_yaw_offset"].as<double>() : 0.0;
+    hik_fov_h_ = yaml["omni_hik_fov_h"] ? yaml["omni_hik_fov_h"].as<double>() : 54.2;
+    hik_fov_v_ = yaml["omni_hik_fov_v"] ? yaml["omni_hik_fov_v"].as<double>() : 44.5;
+    pitch_preset_ = yaml["omni_pitch_preset"] ? yaml["omni_pitch_preset"].as<double>() : 0.0;
 }
 
 Command Decider::decide(
@@ -98,36 +111,58 @@ Command Decider::decide(const std::vector<DetectionResult> & detection_queue)
         return Command{false, false, 0, 0};
     }
 
-    DetectionResult dr = detection_queue.front();
-    if (dr.armors.empty()) return Command{false, false, 0, 0};
-    logger()->info(
-        "omniperceptron find {},delta yaw is {:.4f}", ARMOR_NAMES[dr.armors.front().name],
-        dr.delta_yaw * 57.3);
+    // 对结果过滤 + 优先级排序（不改变外部传入队列）
+    auto queue = detection_queue;
+    sort(queue);
 
-    return Command{true, false, dr.delta_yaw, dr.delta_pitch};
-};
+    // 海康优先：海康有目标 -> yaw/pitch 全由海康驱动
+    for (const auto & dr : queue) {
+        if (dr.source == DetectionSource::HIK) {
+            if (dr.armors.empty()) continue;
+            logger()->info(
+                "omni[HIK] find {},delta yaw is {:.4f},delta pitch is {:.4f}",
+                ARMOR_NAMES[dr.armors.front().name], dr.delta_yaw * 57.3, dr.delta_pitch * 57.3);
+            return Command{true, false, dr.delta_yaw, dr.delta_pitch};
+        }
+    }
+
+    // 无海康目标：用 USB 引导 yaw，pitch 固定为预设值
+    for (const auto & dr : queue) {
+        if (dr.source == DetectionSource::USB) {
+            if (dr.armors.empty()) continue;
+            logger()->info(
+                "omni[USB:{}] find target,delta yaw is {:.4f},pitch preset",
+                dr.camera, dr.delta_yaw * 57.3);
+            return Command{true, false, dr.delta_yaw, pitch_preset_ / 57.3};
+        }
+    }
+
+    return Command{false, false, 0, 0};
+}
 
 Eigen::Vector2d Decider::delta_angle(
     const std::vector<Armor> & armors, const std::string & camera)
 {
+    // 相机安装 yaw 偏移 + 各自 FOV（degree）
+    double yaw_offset = 0.0;
+    double fov_h = fov_h_;
+    double fov_v = fov_v_;
+
+    if (camera == "hik") {
+        yaw_offset = hik_yaw_offset_;
+        fov_h = hik_fov_h_;
+        fov_v = hik_fov_v_;
+    } else if (camera.rfind("usb", 0) == 0 && camera.size() > 3) {
+        int idx = std::stoi(camera.substr(3));
+        if (idx >= 0 && idx < static_cast<int>(usb_yaw_offsets_.size())) {
+            yaw_offset = usb_yaw_offsets_[idx];
+        }
+    }
+
     Eigen::Vector2d delta_angle;
-    if (camera == "left") {
-        delta_angle[0] = 62 + (new_fov_h_ / 2) - armors.front().center_norm.x * new_fov_h_;
-        delta_angle[1] = armors.front().center_norm.y * new_fov_v_ - new_fov_v_ / 2;
-        return delta_angle;
-    }
-
-    else if (camera == "right") {
-        delta_angle[0] = -62 + (new_fov_h_ / 2) - armors.front().center_norm.x * new_fov_h_;
-        delta_angle[1] = armors.front().center_norm.y * new_fov_v_ - new_fov_v_ / 2;
-        return delta_angle;
-    }
-
-    else {
-        delta_angle[0] = 170 + (54.2 / 2) - armors.front().center_norm.x * 54.2;
-        delta_angle[1] = armors.front().center_norm.y * 44.5 - 44.5 / 2;
-        return delta_angle;
-    }
+    delta_angle[0] = yaw_offset + (fov_h / 2.0) - armors.front().center_norm.x * fov_h;
+    delta_angle[1] = armors.front().center_norm.y * fov_v - fov_v / 2.0;
+    return delta_angle;
 }
 
 bool Decider::armor_filter(std::vector<Armor> & armors)

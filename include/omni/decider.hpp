@@ -54,6 +54,13 @@ private:
     int mode_;
     int count_;
 
+    // 全向感知相机安装参数
+    std::vector<double> usb_yaw_offsets_;  // 三个USB相对yaw零位的安装角(degree)
+    double hik_yaw_offset_;                // 海康相对yaw零位安装角(degree)
+    double hik_fov_h_;                     // 海康水平FOV(degree)
+    double hik_fov_v_;                     // 海康垂直FOV(degree)
+    double pitch_preset_;                  // 无海康目标时的pitch预设(degree)
+
     Color enemy_color_;
     YOLO detector_;
     std::vector<ArmorName> invincible_armor_;  //无敌状态机器人编号,英雄为1，哨兵为6
