@@ -14,6 +14,7 @@ RoboMaster 视觉系统：**自瞄**（传统视觉 / YOLO v5·v8·v11 + EKF 跟
 - [编译](#编译)
 - [程序入口速查](#程序入口速查)
 - [配置说明](#配置说明)
+- [全向感知](#全向感知)
 - [模型与推理后端](#模型与推理后端)
 - [标定流程](#标定流程)
 - [通讯与串口协议](#通讯与串口协议)
@@ -27,7 +28,7 @@ RoboMaster 视觉系统：**自瞄**（传统视觉 / YOLO v5·v8·v11 + EKF 跟
 ## 快速上手（海康相机 + 自瞄）
 
 ```bash
-cd qtl_vision_OpenVINO-or-TensorRT  # 进入项目根目录
+cd qtl_vision_Omnidirectional_sensing  # 进入项目根目录
 
 # ① 验证相机出图（-d 显示画面，窗口按 q 退出）
 ./build/camera_test configs/standard1.yaml -d
@@ -54,7 +55,7 @@ cd qtl_vision_OpenVINO-or-TensorRT  # 进入项目根目录
 ## 项目结构
 
 ```
-qtl_vision_OpenVINO-or-TensorRT/
+qtl_vision_Omnidirectional_sensing/
 ├── CMakeLists.txt              # 扁平构建：每模块一个 OBJECT 库，按注释分组
 ├── include/<模块>/xxx.hpp      # 头文件，按模块分目录
 ├── src/<模块>/xxx.cpp          # 源文件，与 include/ 镜像
@@ -88,7 +89,7 @@ qtl_vision_OpenVINO-or-TensorRT/
 | `planner` | MPC 规划器（tinympc） |
 | `fire` | 弹道迭代瞄准 + 开火判定 |
 | `buff` | 能量机关：检测/解算/预测/瞄准（yolo11_buff） |
-| `omni` | 全向感知 + 目标决策 |
+| `omni` | 全向感知：3 USB 传统检测 + 1 海康 YOLO，共 yaw、海康独享 pitch，海康优先决策 |
 
 ---
 
@@ -217,6 +218,39 @@ simulate: true                 # 模拟模式（见上）
 | `example.yaml` | 迈德威视 | 示例 |
 | `demo.yaml` | hikrobot | YOLO 回放测试 |
 | `video_demo.yaml` | 视频文件 | 无硬件调试（自带 `simulate: true`） |
+
+---
+
+## 全向感知
+
+> 状态：模块与配置已就绪，**尚未接线到任何程序入口**（USB 相机未到位，暂不启用）。
+
+全向感知方案：**3 路 USB 相机 + 1 路海康相机**，4 相机共用 yaw 轴、海康独享 pitch 轴。
+
+| 相机 | 检测路线 | 作用 |
+|---|---|---|
+| USB × 3 | 传统视觉（灯条几何匹配，**不识别编号**） | 全向搜索：只报「有无目标 + 方位」，引导 yaw 转向 |
+| 海康 × 1 | YOLO（TensorRT） | 主瞄准：高精度自瞄，yaw/pitch 均由其驱动 |
+
+决策逻辑（`Decider::decide(detection_queue)`）：
+
+- **海康优先**：海康视野内有目标 → `Command{yaw, pitch}` 全由海康目标驱动；
+- 海康无目标 → 用 USB 中优先级最高的目标驱动 yaw，**pitch 固定为预设值**；
+- 都没有 → 输出 `control=false`。
+
+配置键（见 `configs/omni.yaml`，USB 的 FOV 复用 `fov_h/fov_v`）：
+
+```yaml
+omni_usb_yaw_offsets: [60, -60, -180]  # 三个USB相对yaw零位的安装角(degree)
+omni_hik_yaw_offset: 0                  # 海康相对yaw零位安装角(degree)
+omni_hik_fov_h: 54.2                    # 海康水平FOV(degree)
+omni_hik_fov_v: 44.5                    # 海康垂直FOV(degree)
+omni_pitch_preset: 0                    # 无海康目标时pitch预设(degree)
+```
+
+相关代码：`omni/perceptron`（3 个传统线程 + 1 个 YOLO 线程并行采图检测）、
+`omni/decider`（过滤 / 排序 / 海康优先决策）、`detector`（`use_classifier=false`
+跳过数字分类器，仅灯条几何）、`camera/usbcamera`（三路设备识别）。
 
 ---
 
