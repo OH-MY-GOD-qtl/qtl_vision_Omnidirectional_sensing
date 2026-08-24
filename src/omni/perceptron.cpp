@@ -11,23 +11,24 @@
 
 Perceptron::Perceptron(
     USBCamera * usbcam1, USBCamera * usbcam2, USBCamera * usbcam3,
-    USBCamera * usbcam4, const std::string & config_path)
+    Camera * hikcam, const std::string & config_path)
 : detection_queue_(10), decider_(config_path), stop_flag_(false)
 {
-    // 初始化 YOLO 模型
-    yolo_parallel1_ = std::make_shared<YOLO>(config_path, false);
-    yolo_parallel2_ = std::make_shared<YOLO>(config_path, false);
-    yolo_parallel3_ = std::make_shared<YOLO>(config_path, false);
-    yolo_parallel4_ = std::make_shared<YOLO>(config_path, false);
+    // 海康一路 YOLO
+    yolo_ = std::make_shared<YOLO>(config_path, false);
 
-    std::this_thread::sleep_for(std::chrono::seconds(2));
-    // 创建四个线程进行并行推理
-    threads_.emplace_back([&] { parallel_infer(usbcam1, yolo_parallel1_); });
-    threads_.emplace_back([&] { parallel_infer(usbcam2, yolo_parallel2_); });
-    threads_.emplace_back([&] { parallel_infer(usbcam3, yolo_parallel3_); });
-    threads_.emplace_back([&] { parallel_infer(usbcam4, yolo_parallel4_); });
+    // USB 三路传统检测：每个线程独立 Detector 实例（Detector 含帧级缓冲，非线程安全）
+    detector1_ = std::make_shared<Detector>(config_path, false, false);  // 不加载分类器
+    detector2_ = std::make_shared<Detector>(config_path, false, false);
+    detector3_ = std::make_shared<Detector>(config_path, false, false);
 
-    logger()->info("Perceptron initialized.");
+    // USB 安装角: +60 / -60 / -180，对应 usb0/usb1/usb2
+    threads_.emplace_back([this, usbcam1] { parallel_infer_usb(usbcam1, *detector1_, "usb0"); });
+    threads_.emplace_back([this, usbcam2] { parallel_infer_usb(usbcam2, *detector2_, "usb1"); });
+    threads_.emplace_back([this, usbcam3] { parallel_infer_usb(usbcam3, *detector3_, "usb2"); });
+    threads_.emplace_back([this, hikcam] { parallel_infer_hik(hikcam, *yolo_); });
+
+    logger()->info("Perceptron initialized (3 USB traditional + 1 Hik YOLO).");
 }
 
 Perceptron::~Perceptron()
@@ -61,17 +62,17 @@ std::vector<DetectionResult> Perceptron::get_detection_queue()
     return result;
 }
 
-// 将并行推理逻辑移动到类成员函数
-void Perceptron::parallel_infer(
-    USBCamera * cam, std::shared_ptr<YOLO> & yolov8_parallel)
+// USB 传统检测线程
+void Perceptron::parallel_infer_usb(
+    USBCamera * cam, Detector & detector, const std::string & camera_key)
 {
     if (!cam) {
-        logger()->error("Camera pointer is null!");
+        logger()->error("USB camera pointer is null!");
         return;
     }
     try {
         while (true) {
-            cv::Mat usb_img;
+            cv::Mat img;
             std::chrono::steady_clock::time_point ts;
 
             {
@@ -79,26 +80,70 @@ void Perceptron::parallel_infer(
                 if (stop_flag_) break;  // 检查是否需要退出
             }
 
-            cam->read(usb_img, ts);
-            if (usb_img.empty()) {
+            cam->read(img, ts);
+            if (img.empty()) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(30));
                 continue;
             }
 
-            auto armors = yolov8_parallel->detect(usb_img);
+            auto armors = detector.detect(img);
             if (!armors.empty()) {
-                auto delta_angle = decider_.delta_angle(armors, cam->device_name);
+                auto delta_angle = decider_.delta_angle(armors, camera_key);
 
                 DetectionResult dr;
                 dr.armors = std::move(armors);
                 dr.timestamp = ts;
                 dr.delta_yaw = delta_angle[0] / 57.3;
                 dr.delta_pitch = delta_angle[1] / 57.3;
+                dr.source = DetectionSource::USB;
+                dr.camera = camera_key;
                 detection_queue_.push(dr);  // 推入线程安全队列
             }
         }
     } catch (const std::exception & e) {
-        logger()->error("Exception in parallel_infer: {}", e.what());
+        logger()->error("Exception in parallel_infer_usb: {}", e.what());
+    }
+}
+
+// 海康模型检测线程
+void Perceptron::parallel_infer_hik(Camera * cam, YOLO & yolo)
+{
+    if (!cam) {
+        logger()->error("Hik camera pointer is null!");
+        return;
+    }
+    try {
+        while (true) {
+            cv::Mat img;
+            std::chrono::steady_clock::time_point ts;
+
+            {
+                std::unique_lock<std::mutex> lock(mutex_);
+                if (stop_flag_) break;  // 检查是否需要退出
+            }
+
+            cam->read(img, ts);
+            if (img.empty()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(30));
+                continue;
+            }
+
+            auto armors = yolo.detect(img);
+            if (!armors.empty()) {
+                auto delta_angle = decider_.delta_angle(armors, "hik");
+
+                DetectionResult dr;
+                dr.armors = std::move(armors);
+                dr.timestamp = ts;
+                dr.delta_yaw = delta_angle[0] / 57.3;
+                dr.delta_pitch = delta_angle[1] / 57.3;
+                dr.source = DetectionSource::HIK;
+                dr.camera = "hik";
+                detection_queue_.push(dr);  // 推入线程安全队列
+            }
+        }
+    } catch (const std::exception & e) {
+        logger()->error("Exception in parallel_infer_hik: {}", e.what());
     }
 }
 
