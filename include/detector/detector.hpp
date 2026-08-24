@@ -1,6 +1,7 @@
 #ifndef AUTO_AIM__DETECTOR_HPP
 #define AUTO_AIM__DETECTOR_HPP
 
+#include <memory>
 #include <vector>
 #include <opencv2/opencv.hpp>
 #include <string>
@@ -16,7 +17,7 @@
 class Detector
 {
 public:
-    Detector(const std::string & config_path, bool debug = true);
+    Detector(const std::string & config_path, bool debug = true, bool use_classifier = true);
 
     std::vector<Armor> detect(const cv::Mat & bgr_img, int frame_count = -1);
 
@@ -37,7 +38,7 @@ public:
     void classify(Armor & armor);
 
 private:
-    Classifier classifier_;
+    std::unique_ptr<Classifier> classifier_;  // 数字分类器（use_classifier=false 时为空）
 
     ChannelThresholder channel_thresholder_;  // 分离颜色通道双阈值预处理（见 image 模块）
     LightbarParams lightbar_params_;          // 灯条几何筛选参数（见 lightbar 模块）
@@ -47,6 +48,7 @@ private:
     double max_rectangular_error_;
 
     bool debug_;
+    bool use_classifier_;  // 是否使用数字分类器（USB 全向路线为 false）
     std::string save_path_;
 
     // 帧级复用缓冲：避免每帧重复分配二值图与轮廓容器

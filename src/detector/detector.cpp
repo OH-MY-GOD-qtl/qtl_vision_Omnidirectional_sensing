@@ -13,10 +13,13 @@
 #include "image/image.hpp"
 
 
-Detector::Detector(const std::string & config_path, bool debug)
-: classifier_(config_path), debug_(debug)
+Detector::Detector(const std::string & config_path, bool debug, bool use_classifier)
+: debug_(debug), use_classifier_(use_classifier)
 {
     auto yaml = yaml_load(config_path);
+
+    // USB 全向路线不加载分类器，节省模型加载时间/内存
+    if (use_classifier_) classifier_ = std::make_unique<Classifier>(config_path);
 
     // 分离颜色通道双阈值预处理参数（缺失键回退默认值，兼容旧配置）
     auto enemy_color =
@@ -80,18 +83,25 @@ std::vector<Armor> Detector::detect(const cv::Mat & bgr_img, int frame_count)
             }
 
             armor.pattern = get_pattern(bgr_img, armor);
-            classifier_.classify(armor);
-            if (!check_name(armor, true)) {
-                static int name_dbg = 0;
-                if (++name_dbg % 5 == 0)
-                    logger()->debug(
-                        "[Detector] name fail: name={} conf={:.2f} ratio={:.2f}", ARMOR_NAMES[armor.name],
-                        armor.confidence, armor.ratio);
-                continue;
-            }
+            if (use_classifier_) {
+                classifier_->classify(armor);
+                if (!check_name(armor, true)) {
+                    static int name_dbg = 0;
+                    if (++name_dbg % 5 == 0)
+                        logger()->debug(
+                            "[Detector] name fail: name={} conf={:.2f} ratio={:.2f}", ARMOR_NAMES[armor.name],
+                            armor.confidence, armor.ratio);
+                    continue;
+                }
 
-            armor.type = get_type(armor);
-            if (!check_type(armor)) continue;
+                armor.type = get_type(armor);
+                if (!check_type(armor)) continue;
+            } else {
+                // USB 全向感知路线：仅灯条几何匹配，不识别编号
+                armor.name = ArmorName::not_armor;
+                armor.type = ArmorType::small;
+                armor.confidence = 1.0;  // 无分类器，置默认值避免后续读取未初始化字段
+            }
 
             armor.center_norm = get_center_norm(bgr_img, armor.center);
             armors.emplace_back(armor);
@@ -371,7 +381,14 @@ cv::Point2f Detector::get_center_norm(const cv::Mat & bgr_img, const cv::Point2f
     return {center.x / w, center.y / h};
 }
 
-void Detector::classify(Armor & armor) { classifier_.classify(armor); }
+void Detector::classify(Armor & armor)
+{
+    if (classifier_) {
+        classifier_->classify(armor);
+    } else {
+        armor.name = ArmorName::not_armor;
+    }
+}
 
 void Detector::save(const Armor & armor) const
 {
