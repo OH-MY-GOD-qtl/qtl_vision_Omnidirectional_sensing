@@ -4,13 +4,13 @@
 #include <Eigen/Geometry>
 #include <atomic>
 #include <chrono>
+#include <deque>
 #include <mutex>
 #include <string>
 #include <thread>
 
 #include "common/common.hpp"
 #include "serial/serial.h"
-#include "tools/thread_safe_queue.hpp"
 
 
 
@@ -85,6 +85,7 @@ public:
 
 private:
     bool simulate_ = false;  // 无硬件模拟模式：不打开串口，固定自瞄
+    bool debug_serial_ = false;  // 打印串口收发原始字节（调试用）
     serial::Serial serial_;
 
     std::thread thread_;
@@ -96,14 +97,14 @@ private:
 
     GimbalMode mode_ = GimbalMode::IDLE;
     GimbalState state_;
-    ThreadSafeQueue<std::tuple<Eigen::Quaterniond, std::chrono::steady_clock::time_point>>
-        queue_{1000};
-    std::tuple<Eigen::Quaterniond, std::chrono::steady_clock::time_point> data_ahead_;
-    std::tuple<Eigen::Quaterniond, std::chrono::steady_clock::time_point> data_behind_;
+    // 姿态-时间戳历史缓冲：按相机捕获时刻插值云台姿态（时间戳对齐）
+    std::deque<std::tuple<Eigen::Quaterniond, std::chrono::steady_clock::time_point>> q_history_;
+    static constexpr size_t kQHistoryMax = 500;  // 约0.5s @1kHz（按实际串口频率自适应）
     bool read(uint8_t * buffer, size_t size);
     void read_thread();
     void reconnect();
     void log_sim();  // 模拟模式下的控制信息打印
+    void dump_hex(const char * tag, const uint8_t * data, size_t size);
 };
 
 

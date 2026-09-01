@@ -61,7 +61,7 @@ void CommandGener::generate_command()
             bool fire = shooter_.shoot(command, aimer_, input->targets_, input->gimbal_pos);
             VisionToGimbal.mode = input->targets_.empty() ? 0 : 2;  //0不控制，2控制且开火
             VisionToGimbal.yaw = command.yaw;
-            VisionToGimbal.pitch = -(command.pitch);
+            VisionToGimbal.pitch = command.pitch;  // 符号统一在 Gimbal::send 处理
             VisionToGimbal.shoot = fire;
             VisionToGimbal.is_empty = input->targets_.empty();
 
