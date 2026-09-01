@@ -59,8 +59,8 @@ distance_offsets:
 comming_angle: 60 # degree
 leaving_angle: 20 # degree
 decision_speed: 8 # rad/s
-high_speed_delay_time: 0.015 # s
-low_speed_delay_time: 0.015 # s
+high_speed_delay_time: 0.050 # s   # 整链路延迟补偿：15ms→50ms起步，再实测标定
+low_speed_delay_time: 0.050 # s
 
 #####-----shooter参数-----#####
 first_tolerance: 3 # 近距离射击容差，degree
@@ -96,6 +96,7 @@ t_camera2gimbal: [0.13896449776991429, 0.0016645156598860274, 0.0456530298220751
 #####-----gimbal参数-----#####
 com_port: "/dev/ttyACM0"
 baud_rate: 115200     # 波特率
+debug_serial: true    # 打印串口收发原始字节（调试用）
 bytesize: 8             # 数据位
 parity: "none"          # 奇偶校验（none/odd/even）
 stopbits: 1             # 停止位

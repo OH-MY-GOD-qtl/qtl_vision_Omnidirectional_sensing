@@ -60,8 +60,8 @@ distance_offsets:
 comming_angle: 60 # degree
 leaving_angle: 20 # degree
 decision_speed: 8 # rad/s
-high_speed_delay_time: 0.015 # s
-low_speed_delay_time: 0.015 # s
+high_speed_delay_time: 0.050 # s   # 整链路延迟补偿：15ms→50ms起步，再实测标定
+low_speed_delay_time: 0.050 # s
 
 #####-----shooter参数-----#####
 first_tolerance: 3 # 近距离射击容差，degree
