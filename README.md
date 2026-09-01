@@ -1,54 +1,35 @@
 # qtl_vision_Omnidirectional_sensing
 
-RoboMaster 视觉系统：**自瞄**（传统视觉 / YOLO v5·v8·v11 + EKF 跟踪 + MPC 规划）、
-**能量机关**（yolo11_buff）、**全向感知**、相机标定工具链与测试套件。
-算法源自 dx_vision（同济 SuperPower 25 赛季开源），按"功能等价、算法优化、模块化清晰"标准重构。
+RoboMaster 视觉系统（C++17）：源自 dx_vision（同济 SuperPower 25 赛季开源），
+按"功能等价、算法管线优化、模块化清晰、Jetson适配"标准重构。
+
+**核心能力**
+
+- **自瞄**：传统视觉 / YOLO v5·v8·v11 检测 + EKF 跟踪 + PnP 位姿解算，弹道 Aimer 或 MPC 规划
+- **推理双后端**：YOLOv5 支持 OpenVINO（CPU，机器人端）与 TensorRT（GPU，本机），改 `use_tensorrt` 一键切换
+- **能量机关**：yolo11_buff 检测 + 解算 + 预测 + 瞄准
+- **全向感知**：3 路 USB（传统检测）+ 1 路海康（YOLO）多相机融合，海康优先目标决策
+- **工具链**：相机标定（内参 / 手眼 / 机器人基座系）、视频切帧、YOLO 冒烟、19+ 项测试
 
 ---
 
 ## 目录
 
-- [快速上手（海康相机 + 自瞄）](#快速上手海康相机--自瞄)
 - [项目结构](#项目结构)
 - [环境准备](#环境准备)
 - [编译](#编译)
+- [快速上手（海康相机 + 自瞄）](#快速上手海康相机--自瞄)
 - [程序入口速查](#程序入口速查)
 - [配置说明](#配置说明)
 - [全向感知](#全向感知)
-- [模型与推理后端](#模型与推理后端)
+- [推理引擎：OpenVINO / TensorRT 双后端](#推理引擎openvino--tensorrt-双后端)
 - [标定流程](#标定流程)
 - [通讯与串口协议](#通讯与串口协议)
-- [部署自启动](#部署自启动可选)
+- [部署自启动（可选）](#部署自启动可选)
 - [测试与冒烟](#测试与冒烟)
 - [常见问题 FAQ](#常见问题-faq)
 - [与 dx_vision 的关系](#与-dx_vision-的关系)
-
----
-
-## 快速上手（海康相机 + 自瞄）
-
-```bash
-cd qtl_vision_Omnidirectional_sensing  # 进入项目根目录
-
-# ① 验证相机出图（-d 显示画面，窗口按 q 退出）
-./build/camera_test configs/standard1.yaml -d
-
-# ② 无云台跑自瞄全链路（模拟模式，不打开串口，只打印模拟下发）
-./build/traditional_debug configs/standard1_sim.yaml          # 传统视觉检测
-./build/auto_aim_debug_mpc configs/standard1_sim.yaml         # YOLO + MPC 调试版
-
-# ③ 接上云台串口后的实机自瞄
-./build/traditional_debug configs/standard1.yaml
-./build/auto_aim_debug_mpc configs/standard1.yaml
-```
-
-前提：
-- 海康相机已插入并被系统识别：`lsusb | grep 2bdf` 应有 `Hikrobot MV-...`
-- 相机 USB 权限（udev 规则）已配置，见[环境准备](#环境准备)
-- `standard1.yaml` 的相机段指向海康（`camera_name: "hikrobot"`、`vid_pid: "2bdf:0001"`）
-- 实机自瞄需要云台串口 `/dev/ttyACM0` 存在，否则程序会直接退出（见 FAQ）
-
-窗口退出统一按 **q**（或 Ctrl+C）；**不要按 Ctrl+Z**（进程只是被暂停，会继续占用相机/串口）。
+- [License](#license)
 
 ---
 
@@ -111,7 +92,7 @@ sudo apt install -y libopencv-dev libyaml-cpp-dev libfmt-dev libeigen3-dev \
   `CUDA_INCLUDE_DIR` / `CUDA_RUNTIME_LIBRARY`。
 - 机器人端 CPU 部署若无需 TensorRT，当前 CMake 仍将其作为硬依赖；如需裁剪可
   在 `CMakeLists.txt` 中把 `find_*` 的 `FATAL_ERROR` 改为可选并去掉
-  `tensorrt_infer.cpp` 的参与（详见[模型与推理后端](#模型与推理后端)）。
+  `tensorrt_infer.cpp` 的参与（详见[推理引擎：OpenVINO / TensorRT 双后端](#推理引擎openvino--tensorrt-双后端)）。
 
 **海康相机 USB 权限**（必须，否则普通用户打不开相机，日志刷 `Unable to open usb!`）：
 
@@ -146,6 +127,33 @@ cmake .. && make -j
 
 > 构建同时依赖 OpenVINO 与 TensorRT/CUDA（见[环境准备](#环境准备)）；三者任一缺失
 > 都会在 `cmake` 配置阶段报错。TensorRT 仅 YOLOv5 链路用到，其余模型走 OpenVINO。
+
+---
+
+## 快速上手（海康相机 + 自瞄）
+
+```bash
+cd qtl_vision_Omnidirectional_sensing  # 进入项目根目录
+
+# ① 验证相机出图（-d 显示画面，窗口按 q 退出）
+./build/camera_test configs/standard1.yaml -d
+
+# ② 无云台跑自瞄全链路（模拟模式，不打开串口，只打印模拟下发）
+./build/traditional_debug configs/standard1_sim.yaml          # 传统视觉检测
+./build/auto_aim_debug_mpc configs/standard1_sim.yaml         # YOLO + MPC 调试版
+
+# ③ 接上云台串口后的实机自瞄
+./build/traditional_debug configs/standard1.yaml
+./build/auto_aim_debug_mpc configs/standard1.yaml
+```
+
+前提：
+- 海康相机已插入并被系统识别：`lsusb | grep 2bdf` 应有 `Hikrobot MV-...`
+- 相机 USB 权限（udev 规则）已配置，见[环境准备](#环境准备)
+- `standard1.yaml` 的相机段指向海康（`camera_name: "hikrobot"`、`vid_pid: "2bdf:0001"`）
+- 实机自瞄需要云台串口 `/dev/ttyACM0` 存在，否则程序会直接退出（见 FAQ）
+
+窗口退出统一按 **q**（或 Ctrl+C）；**不要按 Ctrl+Z**（进程只是被暂停，会继续占用相机/串口）。
 
 ---
 
@@ -218,6 +226,7 @@ simulate: true                 # 模拟模式（见上）
 | `example.yaml` | 迈德威视 | 示例 |
 | `demo.yaml` | hikrobot | YOLO 回放测试 |
 | `video_demo.yaml` | 视频文件 | 无硬件调试（自带 `simulate: true`） |
+| `omni.yaml` | hikrobot + USB ×3 | 全向感知（3 USB 传统 + 1 海康 YOLO） |
 
 ---
 
@@ -254,10 +263,11 @@ omni_pitch_preset: 0                    # 无海康目标时pitch预设(degree)
 
 ---
 
-## 模型与推理后端
+## 推理引擎：OpenVINO / TensorRT 双后端
 
 推理引擎有两套：**OpenVINO**（机器人端 CPU 部署，默认）与 **TensorRT**
-（WSL 本机 NVIDIA 显卡），YOLOv5 链路可通过配置一键切换。
+（本机 NVIDIA 显卡 GPU 加速），YOLOv5 链路可通过配置一键切换。
+其余模型（v8 / v11 / buff / 分类器）当前仅接入 OpenVINO 后端。
 
 ### 模型清单
 
@@ -270,25 +280,24 @@ omni_pitch_preset: 0                    # 无海康目标时pitch预设(degree)
 | `assets/yolo11_buff_int8.xml` | 能量机关检测 | OpenVINO | INT8 量化，供 buff 模块 |
 | `assets/tiny_resnet.onnx` | 装甲板数字分类器 | OpenVINO | 数字 1~5 识别 |
 
-> 除 YOLOv5 外，其余模型（v8 / v11 / buff / 分类器）当前仅接入 OpenVINO 后端。
+### 后端切换（YOLOv5）
 
-### 架构切换（YOLOv5）
-
-切换由配置项控制，改 `use_tensorrt` 即可：
+切换由配置项控制，改 `use_tensorrt` 即可，无需重新编译：
 
 ```yaml
-use_tensorrt: true                      # true=TensorRT；false=OpenVINO
+use_tensorrt: true                      # true=TensorRT（GPU）；false=OpenVINO（CPU）
 yolov5_model_path: assets/0526.onnx     # OpenVINO 后端加载的 ONNX
 yolov5_engine_path: assets/yolov5.engine # TensorRT 后端加载的引擎
 ```
 
 - `use_tensorrt: true`（本机 NVIDIA 显卡）：加载 `.engine` 引擎，
-  经 `TensorRTInfer` 反序列化并推理。
+  经 `TensorRTInfer` 反序列化后在 GPU 上推理，降低检测耗时。
 - `use_tensorrt: false`（机器人端 CPU）：加载 `0526.onnx`，
   经 OpenVINO Runtime 编译推理（`device: CPU`）。
 
 两种后端**共用同一套 letterbox 预处理与后处理解析**（
-`src/detector/yolos/yolov5.cpp`），输入/输出语义一致，仅推理引擎不同。
+`src/detector/yolos/yolov5.cpp`），输入/输出语义一致，仅推理引擎不同；
+因此切换后端不会改变检测结果，只会改变推理速度和所需硬件。
 
 ### ONNX → TensorRT 引擎导出（trtexec）
 
@@ -296,13 +305,11 @@ yolov5_engine_path: assets/yolov5.engine # TensorRT 后端加载的引擎
 
 ```bash
 # 仅支持 FP32 精度（务必不要加 --fp16，见下方说明）
-trtexec --onnx=assets/0526.onnx \--saveEngine=assets/yolov5.engine
+trtexec --onnx=assets/0526.onnx --saveEngine=assets/yolov5.engine
 ```
 
 > ⚠️ **只能用 FP32**：`--fp16` 导出的引擎在推理时会报错。
-> 导出时**不要**加 `--fp16`、`--int8`、`--fp32`等精度参数。
-> **AI**给的命令是带精度参数的是错的。
-
+> 导出时**不要**加 `--fp16`、`--int8` 等精度参数。
 
 说明：
 
@@ -313,16 +320,20 @@ trtexec --onnx=assets/0526.onnx \--saveEngine=assets/yolov5.engine
 - 本项目推理接口要求**静态形状、单输入**，`0526.onnx` 输入固定为 `1x3x640x640`，
   无需设置 `--minShapes / --optShapes / --maxShapes`。
 
-### TensorRT 接口
+### TensorRT 加速实现
 
 `TensorRTInfer`（`include/detector/tensorrt_infer.hpp` +
-`src/detector/tensorrt_infer.cpp`）是对 TensorRT C++ API 的 RAII 封装：
+`src/detector/tensorrt_infer.cpp`）是对 TensorRT C++ API 的 RAII 封装，面向实时
+检测做了如下优化：
 
-- 读取 `.engine` 序列化文件，复用 `IRuntime` / `ICudaEngine` / `IExecutionContext`
-  与 CUDA 显存、主机缓冲（帧间零重复分配）；
-- 当前约束：静态形状、单输入、**FP32**（引擎须以 FP32 导出，`--fp16` 会报错）；
+- 启动时一次性反序列化引擎，复用 `IRuntime` / `ICudaEngine` / `IExecutionContext`
+  与 CUDA 显存、主机缓冲，**帧间零重复分配**；
+- 异步流水：H2D 拷贝 → `enqueueV3` 推理 → D2H 拷贝在同一 `cudaStream` 上排队，
+  最后 `cudaStreamSynchronize` 统一同步；
+- 张量地址（`setTensorAddress`）只在初始化时绑定一次，逐帧仅换数据不换地址；
+- 输入/输出均支持 FP32 与 FP16（`kHALF` 数据自动在主机侧与 `float` 互转）；
 - 推理接口 `infer(const float * input_nchw)` 接受主机 NCHW float32，返回主机侧
-  输出张量（float32）。
+  输出张量（float32），与 OpenVINO 后端保持相同的数据契约。
 
 ---
 
@@ -439,5 +450,11 @@ trtexec --onnx=assets/0526.onnx \--saveEngine=assets/yolov5.engine
 4. **有意差异**：新增 `usb`/`video` 相机源、`simulate` 串口模拟、GimbalState
    默认值；日志节流；资产平铺到 `assets/`；命名冲突改名；
    **YOLOv5 双后端推理**（新增 `TensorRTInfer` 接口，`use_tensorrt` 一键切换
-   OpenVINO / TensorRT，见[模型与推理后端](#模型与推理后端)）。
+   OpenVINO / TensorRT，见[推理引擎：OpenVINO / TensorRT 双后端](#推理引擎openvino--tensorrt-双后端)）。
 5. **清理**：删除无人引用的 ceres 源码包、`archive/` 等残留与孤儿模型。
+
+---
+
+## License
+
+本项目基于 [MIT License](LICENSE)，Copyright (c) 2025 TongjiSuperPower。
