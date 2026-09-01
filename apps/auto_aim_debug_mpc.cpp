@@ -59,8 +59,19 @@ int main(int argc, char * argv[])
             auto plan = planner.plan(target, gs.bullet_speed);
             auto is_empty = target.has_value() ? false : true;
 
+            // 电控只用了速度环（无位置闭环）：把位置环上移到视觉端。
+            // 速度指令 = MPC 前馈速度 + 位置误差反馈，避免纯前馈导致的稳态角度偏差/漂移。
+            double yaw_vel_cmd = plan.yaw_vel;
+            double pitch_vel_cmd = plan.pitch_vel;
+            if (plan.control) {
+                constexpr double kp_yaw = 8.0;    // yaw 角度误差 -> 速度 增益 (rad/s)/rad
+                constexpr double kp_pitch = 12.0; // pitch 角度误差 -> 速度 增益 (rad/s)/rad
+                yaw_vel_cmd += kp_yaw * limit_rad(plan.yaw - gs.yaw);
+                pitch_vel_cmd += kp_pitch * (plan.pitch - gs.pitch);
+            }
+
             gimbal.send(
-                plan.control, plan.fire, plan.yaw, plan.yaw_vel, plan.yaw_acc, plan.pitch, plan.pitch_vel,
+                plan.control, plan.fire, plan.yaw, yaw_vel_cmd, plan.yaw_acc, plan.pitch, pitch_vel_cmd,
                 plan.pitch_acc, is_empty);
 
             nlohmann::json data;
