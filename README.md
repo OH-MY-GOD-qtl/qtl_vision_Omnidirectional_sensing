@@ -250,7 +250,7 @@ omni_pitch_preset: 0                    # 无海康目标时pitch预设(degree)
 
 相关代码：`omni/perceptron`（3 个传统线程 + 1 个 YOLO 线程并行采图检测）、
 `omni/decider`（过滤 / 排序 / 海康优先决策）、`detector`（`use_classifier=false`
-跳过数字分类器，仅灯条几何）、`camera/usbcamera`（三路设备识别）。
+跳过数字分类器，仅灯条几何）、`camera/usbcamera`（按 sharpness 识别左右 left/right）。
 
 ---
 
@@ -380,7 +380,7 @@ trtexec --onnx=assets/0526.onnx \--saveEngine=assets/yolov5.engine
 
 `autostart.sh` 启动 `watchdog.sh`（screen 会话名 `qtl_vision`）；watchdog 守护
 `APP_NAME`（默认 `auto_aim_debug_mpc`）与 `CONFIG_FILE`（默认
-`configs/standard3.yaml`），崩溃自动重启（上限 100 次）。部署时按需修改
+`configs/standard1.yaml`），崩溃自动重启（上限 100 次）。部署时按需修改
 `watchdog.sh` 内两个变量与路径，再按桌面自启动流程注册。
 
 ---
