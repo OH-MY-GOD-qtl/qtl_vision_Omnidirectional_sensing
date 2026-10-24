@@ -1,4 +1,4 @@
-# qtl_vision_Omnidirectional_sensing
+# qtl_vision_Omnidirectional_sensing（已弃用）
 
 RoboMaster 视觉系统（C++17）：源自 dx_vision（同济 SuperPower 25 赛季开源），
 按"功能等价、算法管线优化、模块化清晰、Jetson适配"标准重构。
